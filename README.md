@@ -40,6 +40,7 @@ Body Params:
 Content-Type `application/json`
 
 | Field | Type | Description |
+|-------|------|-------------|
 | score | integer | A number representation of the skill level of the player used to match similarly skilled players. Can be anything but similar skilled players should be numerically close together |
 
 #### Response
@@ -47,6 +48,7 @@ Content-Type `application/json`
 Content-Type `application/json`
 
 | Field | Type | Description |
+|-------|------|-------------|
 | id | string | A UUID that corresponds to the session created. Use this as `session_id` in the `/match` request |
 
 ### `GET /match`
@@ -58,6 +60,7 @@ This request retrieves the id of a match when one has been created
 Query Params:
 
 | Field | Type | Description |
+|-------|------|-------------|
 | session_id | string | A UUID representing the session. This id should be created by using the `/join` API |
 
 #### Response
@@ -65,5 +68,6 @@ Query Params:
 Content-Type `application/json`
 
 | Field | Type | Description |
+|-------|------|-------------|
 | id | string | A UUID representing the "match" that has been joined |
 
