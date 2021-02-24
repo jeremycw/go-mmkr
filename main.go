@@ -5,8 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/google/uuid"
+	"github.com/jeremycw/go-mmkr/matchmaker"
 	"net/http"
-	"time"
 )
 
 type joinRequest struct {
@@ -17,26 +17,13 @@ type joinResponse struct {
 	Uuid string `json:"id"`
 }
 
-type matchConfig struct {
-	minMatchSize   int
-	maxMatchSize   int
-	matchTimeoutMs int
-}
-
-func matchServer(channel chan matchCmd, conf matchConfig) {
-	mmkr := newMatchMaker(conf.minMatchSize, conf.maxMatchSize, conf.matchTimeoutMs)
-	for cmd := range channel {
-		cmd.exec(mmkr)
-	}
-}
-
-func postJoin(channel chan matchCmd, w http.ResponseWriter, r *http.Request) {
+func postJoin(channel chan matchmaker.MatchCmd, w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
 	var join joinRequest
 	decoder.Decode(&join)
 	id := uuid.New()
-	cmd := new(joinCmd)
-	*cmd = joinCmd{id: id, score: join.Score}
+	cmd := new(matchmaker.JoinCmd)
+	*cmd = matchmaker.JoinCmd{Id: id, Score: join.Score}
 	channel <- cmd
 	resp := joinResponse{Uuid: id.String()}
 	body, err := json.Marshal(&resp)
@@ -46,7 +33,7 @@ func postJoin(channel chan matchCmd, w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func getMatch(channel chan matchCmd, w http.ResponseWriter, r *http.Request) {
+func getMatch(channel chan matchmaker.MatchCmd, w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("session_id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -55,8 +42,8 @@ func getMatch(channel chan matchCmd, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resChan := make(chan uuid.UUID)
-	cmd := new(watchCmd)
-	*cmd = watchCmd{id: id, channel: resChan}
+	cmd := new(matchmaker.WatchCmd)
+	*cmd = matchmaker.WatchCmd{Id: id, Channel: resChan}
 	channel <- cmd
 	matchId := <-resChan
 	if matchId == uuid.Nil {
@@ -73,31 +60,19 @@ func getMatch(channel chan matchCmd, w http.ResponseWriter, r *http.Request) {
 	w.Write(body)
 }
 
-func tickMatchMaker(channel chan matchCmd, tickMs int) {
-	for {
-		duration := time.Duration(tickMs) * time.Millisecond
-		time.Sleep(duration)
-		cmd := new(tickCmd)
-		*cmd = tickCmd{delta: tickMs}
-		channel <- cmd
-	}
-}
-
 func main() {
-	channel := make(chan matchCmd)
 	minSize := flag.Int("min-size", 2, "Minimum amount of users required for a match")
 	maxSize := flag.Int("max-size", 32, "Maximum amount of users for a match")
 	timeout := flag.Int("timeout", 30000, "Amount of time in ms to wait for match")
 	period := flag.Int("process-period", 1000, "Amount of time in ms to wait between computing match-ups")
 	port := flag.Int("port", 8080, "Port to bind to")
 	flag.Parse()
-	conf := matchConfig{
-		minMatchSize:   *minSize,
-		maxMatchSize:   *maxSize,
-		matchTimeoutMs: *timeout,
+	conf := matchmaker.MatchConfig{
+		MinMatchSize:   *minSize,
+		MaxMatchSize:   *maxSize,
+		MatchTimeoutMs: *timeout,
 	}
-	go matchServer(channel, conf)
-	go tickMatchMaker(channel, *period)
+	channel := matchmaker.Start(conf, *period)
 	http.HandleFunc("/join", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
 			postJoin(channel, w, r)

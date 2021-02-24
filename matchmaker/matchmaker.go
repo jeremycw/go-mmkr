@@ -1,10 +1,17 @@
-package main
+package matchmaker
 
 import (
 	"container/heap"
 	"container/list"
 	"github.com/google/uuid"
+	"time"
 )
+
+type MatchConfig struct {
+	MinMatchSize   int
+	MaxMatchSize   int
+	MatchTimeoutMs int
+}
 
 type matchMaker struct {
 	heap        IntHeap
@@ -20,6 +27,30 @@ type matchMaker struct {
 type watcher struct {
 	channel chan uuid.UUID
 	matchId uuid.UUID
+}
+
+func matchServer(channel chan MatchCmd, conf MatchConfig) {
+	mmkr := newMatchMaker(conf.MinMatchSize, conf.MaxMatchSize, conf.MatchTimeoutMs)
+	for cmd := range channel {
+		cmd.exec(mmkr)
+	}
+}
+
+func tickMatchMaker(channel chan MatchCmd, tickMs int) {
+	for {
+		duration := time.Duration(tickMs) * time.Millisecond
+		time.Sleep(duration)
+		cmd := new(tickCmd)
+		*cmd = tickCmd{delta: tickMs}
+		channel <- cmd
+	}
+}
+
+func Start(conf MatchConfig, tickMs int) chan MatchCmd {
+	channel := make(chan MatchCmd)
+	go matchServer(channel, conf)
+	go tickMatchMaker(channel, tickMs)
+	return channel
 }
 
 func newMatchMaker(minSize int, matchSize int, timeoutMs int) *matchMaker {
